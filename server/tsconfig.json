@@ -1,0 +1,22 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ESNext"],
+		"target": "ESNext",
+		"module": "ESNext",
+
+		"types": ["bun-types"],
+
+		"strict": false,
+
+		"declaration": true,
+		"outDir": "dist",
+		"noEmit": false,
+		"emitDecoratorMetadata": true,
+
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": false
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist"]
+}

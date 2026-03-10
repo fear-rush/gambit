@@ -1,0 +1,26 @@
+{
+	"name": "server",
+	"version": "0.0.1",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "bun --watch run src/index.ts"
+	},
+	"dependencies": {
+		"eventemitter3": "^5.0.4",
+		"pako": "^2.1.0",
+		"protobufjs": "^8.0.0",
+		"shared": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/pako": "^2.0.4"
+	}
+}
