@@ -1,4 +1,4 @@
-import { exchanges } from "./exchanges";
+import { exchanges } from "../exchanges";
 
 export type MarketType = "spot" | "perpetual" | "futures";
 

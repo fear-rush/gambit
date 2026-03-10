@@ -11,7 +11,8 @@
 	},
 	"scripts": {
 		"build": "tsc",
-		"dev": "bun --watch run src/index.ts"
+		"dev": "bun --watch run src/index.ts",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"eventemitter3": "^5.0.4",

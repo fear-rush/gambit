@@ -75,8 +75,26 @@ Shared types live in `shared/src/types/index.ts` and are re-exported from `share
 ## Rules
 
 1. **Always read documentation** via context7 MCP for libraries/tools before writing code.
-2. **Use web search** to ground your knowledge when uncertain. Reduce hallucination.
-3. **Do not hallucinate or assume** — ask for clarification when unsure.
+2. **Always read `.claude/skills/bun-development`** before writing any Bun/server code. Follow its patterns for package management, testing, bundling, and runtime APIs.
+3. **Use web search** to ground your knowledge when uncertain. Reduce hallucination.
+4. **Do not hallucinate or assume** — ask for clarification when unsure.
+
+## Bun Best Practices
+
+Follow `.claude/skills/bun-development` for all server and runtime code. Key principles:
+
+- **Bun-native stdlib first** — always prefer Bun built-in APIs over Node.js equivalents or third-party packages:
+  - `Bun.serve()` for HTTP servers — no Express, Fastify, or Hono. Use the `routes` object for declarative routing with static routes, dynamic params (`/users/:id`), per-method handlers (`{ GET, POST }`), wildcards (`/api/*`), redirects, and file serving.
+  - `Bun.file()` / `Bun.write()` for filesystem — not `fs/promises`.
+  - `bun:sqlite` for SQLite — not better-sqlite3.
+  - `Bun.password.hash()` / `Bun.password.verify()` for password hashing — not bcrypt.
+  - `Bun.env` for environment variables (`.env` loaded automatically).
+  - `bun:test` for testing — not Jest or Vitest.
+- **WebSocket via `Bun.serve()`** — upgrade in `fetch` handler, define `websocket` handlers (`open`, `message`, `close`), use `server.publish()` / `ws.subscribe()` for pub/sub.
+- **Use `Response.json()`** for JSON responses, `new Response()` for text/stream.
+- **`bun --watch`** for dev, `bun --hot` for hot reload.
+- **Bundle for production** with `Bun.build()` or `bun build` CLI.
+- **Read context7 MCP docs** (`/oven-sh/bun`) for the latest Bun HTTP/WebSocket/routing APIs before implementing server features.
 
 ## React Best Practices
 

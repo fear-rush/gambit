@@ -5,10 +5,10 @@ import type {
 	Ticker,
 	Trade,
 } from "shared";
-import type { ApiEventError } from "./exchange";
-import { exchanges, getExchangeById } from "./exchanges";
-import { getHms, parseMarket } from "./helpers/utils";
-import settings from "./settings";
+import type { ApiEventError } from "../exchange";
+import { exchanges, getExchangeById } from "../exchanges";
+import { getHms, parseMarket } from "../lib/utils";
+import settings from "../config/settings";
 
 class Aggregator {
 	broadcast: (payload: AggregatorPayload) => void;

@@ -1,7 +1,7 @@
 import type { ProductsData } from "shared";
 import { EventEmitter } from "eventemitter3";
-import { fetchAndFormatProducts } from "./productsService";
-import { randomString, sleep } from "./helpers/utils";
+import { fetchAndFormatProducts } from "./services/products";
+import { randomString, sleep } from "./lib/utils";
 
 export interface Api extends WebSocket {
 	_id: string;

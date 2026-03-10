@@ -1,7 +1,7 @@
 import Exchange from '../exchange'
 import type { Api } from '../exchange'
 import type { ProductsData } from 'shared'
-import { sleep } from '../helpers/utils'
+import { sleep } from '../lib/utils'
 
 export default class COINBASE extends Exchange {
   id = 'COINBASE'

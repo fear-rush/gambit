@@ -1,12 +1,12 @@
 import type { ServerWebSocket } from "bun";
 
-export interface WsData {
+export interface ProxyWsData {
 	type: "proxy";
 	target: string;
 	upstream: WebSocket | null;
 }
 
-export function handleWsOpen(ws: ServerWebSocket<WsData>) {
+export function handleProxyOpen(ws: ServerWebSocket<ProxyWsData>) {
 	const { target } = ws.data;
 
 	console.log(`[proxy] client connected, opening upstream: ${target}`);
@@ -49,8 +49,8 @@ export function handleWsOpen(ws: ServerWebSocket<WsData>) {
 	};
 }
 
-export function handleWsMessage(
-	ws: ServerWebSocket<WsData>,
+export function handleProxyMessage(
+	ws: ServerWebSocket<ProxyWsData>,
 	message: string | ArrayBuffer | Uint8Array,
 ) {
 	const { upstream } = ws.data;
@@ -59,7 +59,7 @@ export function handleWsMessage(
 	}
 }
 
-export function handleWsClose(ws: ServerWebSocket<WsData>) {
+export function handleProxyClose(ws: ServerWebSocket<ProxyWsData>) {
 	const { upstream } = ws.data;
 	if (upstream) {
 		try {

@@ -1,7 +1,7 @@
 import Exchange from '../exchange'
 import type { Api } from '../exchange'
 import type { ProductsData } from 'shared'
-import settings from '../settings'
+import settings from '../config/settings'
 
 export default class BINANCE extends Exchange {
   id = 'BINANCE'

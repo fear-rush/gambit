@@ -1,8 +1,8 @@
 import Exchange from '../exchange'
 import type { Api } from '../exchange'
 import type { ProductsData } from 'shared'
-import { sleep } from '../helpers/utils'
-import settings from '../settings'
+import { sleep } from '../lib/utils'
+import settings from '../config/settings'
 
 export default class BINANCE_FUTURES extends Exchange {
   id = 'BINANCE_FUTURES'
