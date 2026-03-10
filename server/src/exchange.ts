@@ -32,6 +32,7 @@ type ExchangeEndpoint =
 		};
 
 type ApiStateChangeResolver = {
+	// biome-ignore lint/suspicious/noConfusingVoidType: void is correct here as the promise resolves without a value
 	promise?: Promise<Api | void>;
 	resolver?: (success: boolean) => void;
 };
@@ -55,10 +56,6 @@ class Exchange extends EventEmitter {
 	clearReconnectionDelayTimeout: { [apiUrl: string]: ReturnType<typeof setTimeout> } = {};
 	count = 0;
 
-	constructor() {
-		super();
-	}
-
 	get requiresProducts() {
 		return !this.products && this.endpoints.PRODUCTS;
 	}
@@ -79,7 +76,7 @@ class Exchange extends EventEmitter {
 		return true;
 	}
 
-	getUrl(pair: string): Promise<string> {
+	getUrl(_pair: string): Promise<string> {
 		throw new Error("Not implemented");
 	}
 
@@ -95,7 +92,7 @@ class Exchange extends EventEmitter {
 		this.resolveApi(pair, hadError);
 	}
 
-	async resolveApi(pair: string, hadError?: boolean) {
+	async resolveApi(pair: string, _hadError?: boolean) {
 		const url = await this.getUrl(pair);
 
 		let api = this.getActiveApiByUrl(url);
@@ -123,7 +120,7 @@ class Exchange extends EventEmitter {
 		api._pending.push(pair);
 
 		if (api.readyState === WebSocket.OPEN) {
-			const timeoutId = "subscribe-" + api._id;
+			const timeoutId = `subscribe-${api._id}`;
 			clearTimeout(this.scheduledOperations[timeoutId]);
 			this.scheduledOperations[timeoutId] = setTimeout(() => {
 				delete this.scheduledOperations[timeoutId];
@@ -215,18 +212,18 @@ class Exchange extends EventEmitter {
 
 		this.connecting[api._id] = {};
 
-		this.connecting[api._id].promise = new Promise<Api>(
-			(resolve, reject) => {
-				this.connecting[api._id].resolver = (success) => {
-					if (success) {
-						this.onApiCreated(api);
-						resolve(api);
-					} else {
-						reject();
-					}
-				};
-			},
-		);
+		// Assign resolver before any async operations that could trigger
+		// onclose synchronously (Bun fires WebSocket handlers synchronously)
+		new Promise<Api>((resolve, reject) => {
+			this.connecting[api._id].resolver = (success: boolean) => {
+				if (success) {
+					this.onApiCreated(api);
+					resolve(api);
+				} else {
+					reject();
+				}
+			};
+		});
 
 		return api;
 	}
@@ -321,19 +318,16 @@ class Exchange extends EventEmitter {
 
 			this.disconnecting[api._id] = {};
 
-			this.disconnecting[api._id].promise = new Promise<void>(
-				(resolve, reject) => {
-					if (api.readyState < WebSocket.CLOSING) {
-						api.close();
-					}
+			// Store promise directly — api.close() may fire onclose synchronously
+			// in Bun, which deletes the disconnecting entry before the constructor returns
+			promiseOfClose = new Promise<void>((resolve, reject) => {
+				this.disconnecting[api._id].resolver = (success: boolean) =>
+					success ? resolve() : reject();
 
-					this.disconnecting[api._id].resolver = (success) =>
-						success ? resolve() : reject();
-				},
-			);
-
-			promiseOfClose = this.disconnecting[api._id]
-				.promise as Promise<void>;
+				if (api.readyState < WebSocket.CLOSING) {
+					api.close();
+				}
+			});
 		} else {
 			promiseOfClose = Promise.resolve();
 		}
@@ -374,18 +368,18 @@ class Exchange extends EventEmitter {
 
 		for (const pair of pairsToReconnect) {
 			console.debug(
-				`[${this.id}.reconnectPairs] unlinking market ${this.id + ":" + pair}`,
+				`[${this.id}.reconnectPairs] unlinking market ${this.id}:${pair}`,
 			);
-			await this.unlink(this.id + ":" + pair);
+			await this.unlink(`${this.id}:${pair}`);
 		}
 
 		await new Promise((resolve) => setTimeout(resolve, 500));
 
 		for (const pair of pairsToReconnect) {
 			console.debug(
-				`[${this.id}.reconnectPairs] linking market ${this.id + ":" + pair}`,
+				`[${this.id}.reconnectPairs] linking market ${this.id}:${pair}`,
 			);
-			await this.link(this.id + ":" + pair, hadError);
+			await this.link(`${this.id}:${pair}`, hadError);
 		}
 	}
 
@@ -405,7 +399,7 @@ class Exchange extends EventEmitter {
 
 		if (
 			typeof productsData === "object" &&
-			Object.prototype.hasOwnProperty.call(productsData, "products")
+			Object.hasOwn(productsData, "products")
 		) {
 			console.debug(`[${this.id}] set products (products data)`);
 			for (const key in productsData) {
@@ -457,15 +451,15 @@ class Exchange extends EventEmitter {
 		this.emit("open", event);
 	}
 
-	onApiCreated(api: Api) {
+	onApiCreated(_api: Api) {
 		// should be overridden by exchange class
 	}
 
-	onApiRemoved(api: Api) {
+	onApiRemoved(_api: Api) {
 		// should be overridden by exchange class
 	}
 
-	onMessage(event: MessageEvent, api: Api): boolean {
+	onMessage(_event: MessageEvent, _api: Api): boolean {
 		throw new Error("Not implemented");
 	}
 
@@ -482,7 +476,7 @@ class Exchange extends EventEmitter {
 		return data as ProductsData;
 	}
 
-	validateProducts(data: unknown): boolean {
+	validateProducts(_data: unknown): boolean {
 		return true;
 	}
 
@@ -522,7 +516,7 @@ class Exchange extends EventEmitter {
 		return api.readyState === WebSocket.OPEN;
 	}
 
-	emitTrades(source: string, trades: Trade[]) {
+	emitTrades(_source: string, trades: Trade[]) {
 		if (!trades || !trades.length) {
 			return;
 		}
@@ -532,7 +526,7 @@ class Exchange extends EventEmitter {
 		return true;
 	}
 
-	emitLiquidations(source: string, trades: Trade[]) {
+	emitLiquidations(_source: string, trades: Trade[]) {
 		if (!trades || !trades.length) {
 			return;
 		}
@@ -598,7 +592,7 @@ class Exchange extends EventEmitter {
 		id: string,
 		success: boolean,
 	) {
-		if (type[id]) {
+		if (type[id]?.resolver) {
 			type[id].resolver(success);
 			delete type[id];
 		}

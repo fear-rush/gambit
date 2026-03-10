@@ -1,4 +1,4 @@
-import type { ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import type { AggregatorPayload } from "shared";
 import Aggregator from "./aggregator";
 import { exchanges } from "./exchanges";
@@ -17,30 +17,25 @@ import {
 
 type WsData = ProxyWsData | { type: "client" };
 
+const AGGREGATOR_TOPIC = "aggregator";
+
 const CORS_HEADERS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 	"Access-Control-Allow-Headers": "Content-Type",
 };
 
-const clients = new Set<ServerWebSocket<WsData>>();
+// Server reference for pub/sub broadcasting
+let serverRef: Server<WsData>;
 
 function broadcast(payload: AggregatorPayload) {
-	const msg = JSON.stringify(payload);
-	for (const client of clients) {
-		try {
-			client.send(msg);
-		} catch {
-			// client disconnected
-		}
-	}
+	serverRef.publish(AGGREGATOR_TOPIC, JSON.stringify(payload));
 }
 
 const aggregator = new Aggregator(broadcast);
 
 let productsReady = false;
 let productsPromise: Promise<void> | null = null;
-
 
 const server = Bun.serve<WsData>({
 	port: Number(process.env.PORT) || 3000,
@@ -61,11 +56,7 @@ const server = Bun.serve<WsData>({
 			const upgraded = server.upgrade(req, {
 				data: { type: "client" as const },
 			});
-
-			if (upgraded) {
-				return undefined;
-			}
-
+			if (upgraded) return undefined;
 			return new Response("WebSocket upgrade failed", {
 				status: 500,
 				headers: CORS_HEADERS,
@@ -75,33 +66,25 @@ const server = Bun.serve<WsData>({
 		// WebSocket proxy upgrade
 		if (url.pathname === "/ws-proxy") {
 			const target = url.searchParams.get("target");
-
 			if (!target) {
 				return new Response("Missing target query parameter", {
 					status: 400,
 					headers: CORS_HEADERS,
 				});
 			}
-
 			const upgraded = server.upgrade(req, {
 				data: { type: "proxy" as const, target, upstream: null },
 			});
-
-			if (upgraded) {
-				return undefined;
-			}
-
+			if (upgraded) return undefined;
 			return new Response("WebSocket upgrade failed", {
 				status: 500,
 				headers: CORS_HEADERS,
 			});
 		}
 
-		// REST: search/filter pairs — server-side filtering
+		// REST: search/filter pairs
 		if (url.pathname === "/api/products/search") {
-			if (!productsReady && productsPromise) {
-				await productsPromise;
-			}
+			if (!productsReady && productsPromise) await productsPromise;
 			const query = url.searchParams.get("q") ?? "";
 			const exchangeParam = url.searchParams.get("exchanges");
 			const typeParam = url.searchParams.get("types");
@@ -109,20 +92,15 @@ const server = Bun.serve<WsData>({
 				? exchangeParam.split(",")
 				: undefined;
 			const filterTypes = typeParam ? typeParam.split(",") : undefined;
-
 			return Response.json(
-				{
-					pairs: searchPairs(query, filterExchanges, filterTypes),
-				},
+				{ pairs: searchPairs(query, filterExchanges, filterTypes) },
 				{ headers: CORS_HEADERS },
 			);
 		}
 
 		// REST: get products for a specific pair (expanded view)
 		if (url.pathname === "/api/products/pair") {
-			if (!productsReady && productsPromise) {
-				await productsPromise;
-			}
+			if (!productsReady && productsPromise) await productsPromise;
 			const local = url.searchParams.get("local");
 			if (!local) {
 				return Response.json(
@@ -136,7 +114,6 @@ const server = Bun.serve<WsData>({
 				? exchangeParam.split(",")
 				: undefined;
 			const filterTypes = typeParam ? typeParam.split(",") : undefined;
-
 			return Response.json(
 				{
 					products: getProductsForPair(
@@ -151,16 +128,14 @@ const server = Bun.serve<WsData>({
 
 		// REST: list all exchanges
 		if (url.pathname === "/api/products/exchanges") {
-			if (!productsReady && productsPromise) {
-				await productsPromise;
-			}
+			if (!productsReady && productsPromise) await productsPromise;
 			return Response.json(
 				{ exchanges: getAllExchanges() },
 				{ headers: CORS_HEADERS },
 			);
 		}
 
-		// HTTP routes
+		// Health check
 		if (url.pathname === "/" || url.pathname === "/health") {
 			return Response.json(
 				{ status: "ok", uptime: process.uptime() },
@@ -175,12 +150,14 @@ const server = Bun.serve<WsData>({
 	},
 
 	websocket: {
+		idleTimeout: 120,
+		maxPayloadLength: 1024 * 1024,
+		perMessageDeflate: true,
+
 		open(ws: ServerWebSocket<WsData>) {
 			if (ws.data.type === "client") {
-				clients.add(ws);
-				console.log(
-					`[ws] client connected (${clients.size} total)`,
-				);
+				ws.subscribe(AGGREGATOR_TOPIC);
+				console.log("[ws] client connected");
 
 				// Send current connections state
 				for (const key of Object.keys(aggregator.connections)) {
@@ -207,6 +184,7 @@ const server = Bun.serve<WsData>({
 				handleWsOpen(ws as ServerWebSocket<ProxyWsData>);
 			}
 		},
+
 		message(
 			ws: ServerWebSocket<WsData>,
 			message: string | ArrayBuffer | Uint8Array,
@@ -216,9 +194,7 @@ const server = Bun.serve<WsData>({
 					const payload = JSON.parse(
 						message as string,
 					) as AggregatorPayload;
-					if (
-						typeof aggregator[payload.op] === "function"
-					) {
+					if (typeof aggregator[payload.op] === "function") {
 						aggregator[payload.op](
 							payload.data,
 							payload.trackingId,
@@ -234,18 +210,19 @@ const server = Bun.serve<WsData>({
 				);
 			}
 		},
+
 		close(ws: ServerWebSocket<WsData>) {
 			if (ws.data.type === "client") {
-				clients.delete(ws);
-				console.log(
-					`[ws] client disconnected (${clients.size} total)`,
-				);
+				ws.unsubscribe(AGGREGATOR_TOPIC);
+				console.log("[ws] client disconnected");
 			} else {
 				handleWsClose(ws as ServerWebSocket<ProxyWsData>);
 			}
 		},
 	},
 });
+
+serverRef = server;
 
 console.log(`Server running at http://localhost:${server.port}`);
 

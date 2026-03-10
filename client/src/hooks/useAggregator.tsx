@@ -7,8 +7,6 @@ import {
 } from "react";
 import { aggregatorService } from "../services/aggregatorService";
 import { useConnectionStore } from "../stores/connectionStore";
-import { useTickerStore } from "../stores/tickerStore";
-
 
 const AggregatorContext = createContext(aggregatorService);
 
@@ -24,7 +22,6 @@ export function AggregatorProvider({ children }: { children: ReactNode }) {
 		initialized.current = true;
 
 		const { addConnection, removeConnection } = useConnectionStore.getState();
-		const { updateTickers } = useTickerStore.getState();
 
 		aggregatorService.on("connection", (data) => {
 			addConnection(`${data.exchangeId}:${data.pair}`, {
@@ -36,10 +33,6 @@ export function AggregatorProvider({ children }: { children: ReactNode }) {
 
 		aggregatorService.on("disconnection", (data) => {
 			removeConnection(`${data.exchangeId}:${data.pair}`);
-		});
-
-		aggregatorService.on("tickers", (tickers) => {
-			updateTickers(tickers);
 		});
 
 		aggregatorService.on("notice", (data) => {

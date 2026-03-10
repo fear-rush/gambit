@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useTrades } from "../hooks/useTrades";
 import { TradeRow } from "./TradeRow";
 
 export function TradeFeed() {
 	const [minAmount, setMinAmount] = useState(0);
 	const trades = useTrades(minAmount);
+
+	const handleMinAmountChange = useCallback(
+		(e: React.ChangeEvent<HTMLInputElement>) => {
+			setMinAmount(Number(e.target.value) || 0);
+		},
+		[],
+	);
 
 	return (
 		<div className="flex flex-col h-full bg-[#0c0c0e]">
@@ -17,7 +24,7 @@ export function TradeFeed() {
 					<input
 						type="number"
 						value={minAmount || ""}
-						onChange={(e) => setMinAmount(Number(e.target.value) || 0)}
+						onChange={handleMinAmountChange}
 						placeholder="0"
 						className="w-14 px-1 py-0 text-[10px] bg-transparent border border-neutral-800 rounded text-neutral-400 focus:outline-none focus:border-neutral-600"
 					/>

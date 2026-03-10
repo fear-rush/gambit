@@ -23,6 +23,8 @@ class Aggregator {
 	private pendingTrades: Trade[] = [];
 	tickers: { [marketId: string]: Ticker } = {};
 	private _connectionChangeNoticeTimeout: ReturnType<typeof setTimeout>;
+	private _tickersInterval: ReturnType<typeof setTimeout>;
+	private _aggrInterval: ReturnType<typeof setInterval>;
 
 	constructor(broadcast: (payload: AggregatorPayload) => void) {
 		this.broadcast = broadcast;
@@ -81,7 +83,7 @@ class Aggregator {
 	emitTrades(trades: Trade[]) {
 		for (let i = 0; i < trades.length; i++) {
 			const trade = trades[i];
-			const marketKey = trade.exchange + ":" + trade.pair;
+			const marketKey = `${trade.exchange}:${trade.pair}`;
 
 			if (!this.connections[marketKey] || !trade.size || !trade.price) {
 				continue;
@@ -108,7 +110,7 @@ class Aggregator {
 
 		for (let i = 0; i < trades.length; i++) {
 			const trade = trades[i] as unknown as AggregatedTrade;
-			const marketKey = trade.exchange + ":" + trade.pair;
+			const marketKey = `${trade.exchange}:${trade.pair}`;
 
 			if (!this.connections[marketKey] || !trade.size || !trade.price) {
 				continue;
@@ -146,7 +148,7 @@ class Aggregator {
 	emitLiquidations(trades: Trade[]) {
 		for (let i = 0; i < trades.length; i++) {
 			const trade = trades[i];
-			const marketKey = trade.exchange + ":" + trade.pair;
+			const marketKey = `${trade.exchange}:${trade.pair}`;
 
 			if (!this.connections[marketKey]) {
 				continue;
@@ -166,8 +168,8 @@ class Aggregator {
 
 		for (let i = 0; i < trades.length; i++) {
 			const trade = trades[i] as unknown as AggregatedTrade;
-			const marketKey = trade.exchange + ":" + trade.pair;
-			const tradeKey = "liq_" + marketKey;
+			const marketKey = `${trade.exchange}:${trade.pair}`;
+			const tradeKey = `liq_${marketKey}`;
 
 			if (!this.connections[marketKey]) {
 				continue;
@@ -208,7 +210,7 @@ class Aggregator {
 	}
 
 	processTrade(trade: AggregatedTrade | Trade): Trade {
-		const marketKey = trade.exchange + ":" + trade.pair;
+		const marketKey = `${trade.exchange}:${trade.pair}`;
 
 		if (settings.calculateSlippage) {
 			if (settings.calculateSlippage === "price") {
@@ -251,8 +253,6 @@ class Aggregator {
 	}
 
 	processLiquidation(trade: Trade): Trade {
-		const marketKey = trade.exchange + ":" + trade.pair;
-
 		trade.amount =
 			(settings.preferQuoteCurrencySize ? trade.price : 1) * trade.size;
 
@@ -335,14 +335,14 @@ class Aggregator {
 			});
 		}
 
-		this["_tickersInterval"] = setTimeout(
+		this._tickersInterval = setTimeout(
 			() => this.emitTickers(),
 			this.tickersDelay,
 		);
 	}
 
 	onSubscribed(exchangeId: string, pair: string, url: string) {
-		const marketKey = exchangeId + ":" + pair;
+		const marketKey = `${exchangeId}:${pair}`;
 
 		if (this.connections[marketKey]) {
 			return;
@@ -379,7 +379,7 @@ class Aggregator {
 	}
 
 	onUnsubscribed(exchangeId: string, pair: string) {
-		const identifier = exchangeId + ":" + pair;
+		const identifier = `${exchangeId}:${pair}`;
 
 		if (this.onGoingAggregations[identifier]) {
 			delete this.onGoingAggregations[identifier];
@@ -421,12 +421,7 @@ class Aggregator {
 					data: {
 						id: "connections",
 						type: "success",
-						title:
-							this.connectionsCount +
-							" connections (" +
-							(this.connectionChange > 0 ? "+" : "") +
-							this.connectionChange +
-							")",
+						title: `${this.connectionsCount} connections (${this.connectionChange > 0 ? "+" : ""}${this.connectionChange})`,
 					},
 				});
 			}
@@ -448,7 +443,7 @@ class Aggregator {
 			this.broadcast({
 				op: "notice",
 				data: {
-					id: exchangeId + "-error",
+					id: `${exchangeId}-error`,
 					type: "error",
 					title: `${exchangeId} disconnected unexpectedly (${message})`,
 				},
@@ -512,7 +507,7 @@ class Aggregator {
 					this.broadcast({
 						op: "notice",
 						data: {
-							id: exchangeId + "-connection-delay",
+							id: `${exchangeId}-connection-delay`,
 							type: "warning",
 							timeout: estimatedTimeToConnectThemAll,
 							title: `Connecting to ${
@@ -605,26 +600,26 @@ class Aggregator {
 	}
 
 	startTickersInterval() {
-		if (this["_tickersInterval"]) {
+		if (this._tickersInterval) {
 			return;
 		}
 		this.emitTickers();
 	}
 
 	startAggrInterval() {
-		if (this["_aggrInterval"]) {
+		if (this._aggrInterval) {
 			this.clearInterval("aggr");
 		}
-		this["_aggrInterval"] = setInterval(
+		this._aggrInterval = setInterval(
 			this.emitPendingTrades.bind(this),
 			Math.max(settings.aggregationLength, 50),
 		);
 	}
 
 	clearInterval(name: string) {
-		if (this["_" + name + "Interval"]) {
-			globalThis.clearInterval(this["_" + name + "Interval"]);
-			this["_" + name + "Interval"] = null;
+		if (this[`_${name}Interval`]) {
+			globalThis.clearInterval(this[`_${name}Interval`]);
+			this[`_${name}Interval`] = null;
 		}
 	}
 
@@ -643,7 +638,7 @@ class Aggregator {
 			this.broadcast({
 				op: "notice",
 				data: {
-					id: exchangeId + "-products",
+					id: `${exchangeId}-products`,
 					type: "error",
 					title: `Failed to format ${exchangeId}'s products`,
 				},

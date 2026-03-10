@@ -1,10 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { lazy, Suspense, useState, useCallback } from "react";
 import { Chart } from "../components/Chart";
 import { TradeFeed } from "../components/TradeFeed";
-import { SearchDialog } from "../components/SearchDialog";
 import { ConnectionBar } from "../components/ConnectionBar";
 import { useConnectionStore } from "../stores/connectionStore";
+
+const searchDialogImport = () =>
+	import("../components/SearchDialog").then((m) => ({
+		default: m.SearchDialog,
+	}));
+
+const SearchDialog = lazy(searchDialogImport);
+
+function preloadSearchDialog() {
+	searchDialogImport();
+}
 
 export const Route = createFileRoute("/")({
 	component: Index,
@@ -14,6 +24,13 @@ function Index() {
 	const [showTrades, setShowTrades] = useState(true);
 	const [showSearch, setShowSearch] = useState(false);
 	const connectionCount = useConnectionStore((s) => s.connections.size);
+
+	const handleOpenSearch = useCallback(() => setShowSearch(true), []);
+	const handleCloseSearch = useCallback(() => setShowSearch(false), []);
+	const handleToggleTrades = useCallback(
+		() => setShowTrades((prev) => !prev),
+		[],
+	);
 
 	return (
 		<div className="flex flex-col h-screen bg-[#0c0c0e] text-neutral-200 overflow-hidden">
@@ -25,7 +42,9 @@ function Index() {
 					</span>
 					<button
 						type="button"
-						onClick={() => setShowSearch(true)}
+						onClick={handleOpenSearch}
+						onMouseEnter={preloadSearchDialog}
+						onFocus={preloadSearchDialog}
 						className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded bg-neutral-800/50 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200 transition-colors"
 					>
 						<span className="text-[10px]">+</span>
@@ -40,7 +59,7 @@ function Index() {
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
-						onClick={() => setShowTrades(!showTrades)}
+						onClick={handleToggleTrades}
 						className={`px-2 py-0.5 text-[11px] rounded ${
 							showTrades
 								? "bg-neutral-700 text-white"
@@ -65,8 +84,12 @@ function Index() {
 				)}
 			</div>
 
-			{/* Search dialog */}
-			<SearchDialog open={showSearch} onClose={() => setShowSearch(false)} />
+			{/* Search dialog — lazy loaded */}
+			{showSearch && (
+				<Suspense fallback={null}>
+					<SearchDialog open={showSearch} onClose={handleCloseSearch} />
+				</Suspense>
+			)}
 		</div>
 	);
 }

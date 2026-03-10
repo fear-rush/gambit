@@ -20,7 +20,7 @@ export function parseMarket(market: string) {
 }
 
 export function getHms(timestamp: number, round = false, divider = ",") {
-	if (isNaN(timestamp) || timestamp === null) {
+	if (Number.isNaN(timestamp) || timestamp === null) {
 		return null;
 	}
 
@@ -36,19 +36,19 @@ export function getHms(timestamp: number, round = false, divider = ",") {
 
 	output +=
 		(!round || !output.length) && d > 0
-			? (output.length ? `${divider} ` : "") + isNegPrefix + d + "d"
+			? `${output.length ? `${divider} ` : ""}${isNegPrefix}${d}d`
 			: "";
 	output +=
 		(!round || !output.length) && h > 0
-			? (output.length ? `${divider} ` : "") + isNegPrefix + h + "h"
+			? `${output.length ? `${divider} ` : ""}${isNegPrefix}${h}h`
 			: "";
 	output +=
 		(!round || !output.length) && m > 0
-			? (output.length ? `${divider} ` : "") + isNegPrefix + m + "m"
+			? `${output.length ? `${divider} ` : ""}${isNegPrefix}${m}m`
 			: "";
 	output +=
 		(!round || !output.length) && s > 0
-			? (output.length ? `${divider} ` : "") + isNegPrefix + s + "s"
+			? `${output.length ? `${divider} ` : ""}${isNegPrefix}${s}s`
 			: "";
 
 	if (

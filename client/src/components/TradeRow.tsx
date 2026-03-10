@@ -1,28 +1,13 @@
+import { memo } from "react";
 import type { Trade } from "shared";
 import { formatAmount } from "../services/productsService";
+import { shortExchange } from "../lib/constants";
 
 interface TradeRowProps {
 	trade: Trade;
 }
 
-const EXCHANGE_SHORT: Record<string, string> = {
-	BINANCE_FUTURES: "BIN-F",
-	BINANCE: "BIN",
-	BITFINEX: "BFNX",
-	BITSTAMP: "BSTP",
-	BITMEX: "BMEX",
-	COINBASE: "COIN",
-	DERIBIT: "DRBT",
-	BYBIT: "BYBT",
-	OKEX: "OKEX",
-	KRAKEN: "KRKN",
-};
-
-function shortExchange(name: string): string {
-	return EXCHANGE_SHORT[name] ?? name.slice(0, 4);
-}
-
-export function TradeRow({ trade }: TradeRowProps) {
+export const TradeRow = memo(function TradeRow({ trade }: TradeRowProps) {
 	if (trade.price == null) return null;
 
 	const isBuy = trade.side === "buy";
@@ -62,4 +47,4 @@ export function TradeRow({ trade }: TradeRowProps) {
 			</span>
 		</div>
 	);
-}
+});

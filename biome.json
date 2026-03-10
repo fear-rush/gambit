@@ -17,6 +17,12 @@
 			"formatter": {
 				"enabled": false
 			}
+		},
+		{
+			"includes": ["client/src/routeTree.gen.ts"],
+			"linter": {
+				"enabled": false
+			}
 		}
 	],
 	"formatter": {
@@ -32,6 +38,15 @@
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double"
+		}
+	},
+	"css": {
+		"parser": {
+			"cssModules": false,
+			"tailwindDirectives": true
+		},
+		"linter": {
+			"enabled": true
 		}
 	},
 	"assist": {

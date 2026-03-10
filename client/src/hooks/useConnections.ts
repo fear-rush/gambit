@@ -9,7 +9,6 @@ export function useConnections() {
 
 	const connect = useCallback(
 		async (markets: string[]) => {
-			// Filter out already-connected markets to prevent duplicates
 			const current = useConnectionStore.getState().connections;
 			const newMarkets = markets.filter((m) => !current.has(m));
 			if (newMarkets.length) {
@@ -21,11 +20,15 @@ export function useConnections() {
 
 	const disconnect = useCallback(
 		async (markets: string[]) => {
-			// Never disconnect default/permanent markets
 			const defaults = getDefaultMarketSet();
 			const removable = markets.filter((m) => !defaults.has(m));
 			if (removable.length) {
-				await aggregator.disconnect(removable);
+				// Optimistically remove from UI immediately
+				useConnectionStore.getState().removeConnections(removable);
+				// Then tell the server (fire-and-forget, don't block UI)
+				aggregator.disconnect(removable).catch((err) => {
+					console.warn("[disconnect] server error:", err);
+				});
 			}
 		},
 		[aggregator],
@@ -36,24 +39,41 @@ export function useConnections() {
 		const defaults = getDefaultMarketSet();
 		const removable = [...current.keys()].filter((m) => !defaults.has(m));
 		if (removable.length) {
-			await aggregator.disconnect(removable);
+			useConnectionStore.getState().removeConnections(removable);
+			aggregator.disconnect(removable).catch((err) => {
+				console.warn("[disconnectAll] server error:", err);
+			});
 		}
 	}, [aggregator]);
 
 	/** Set exact connections — connects new, disconnects removed (except defaults) */
 	const setConnections = useCallback(
-		async (desired: string[]) => {
+		(desired: string[]) => {
 			const current = new Set(useConnectionStore.getState().connections.keys());
 			const desiredSet = new Set(desired);
 			const defaults = getDefaultMarketSet();
 
-			const toConnect = desired.filter((m) => !current.has(m));
 			const toDisconnect = [...current].filter(
 				(m) => !desiredSet.has(m) && !defaults.has(m),
 			);
+			const toConnect = desired.filter((m) => !current.has(m));
 
-			if (toDisconnect.length) await aggregator.disconnect(toDisconnect);
-			if (toConnect.length) await aggregator.connect(toConnect);
+			// Optimistically remove unwanted connections from UI immediately
+			if (toDisconnect.length) {
+				useConnectionStore.getState().removeConnections(toDisconnect);
+			}
+
+			// Fire server commands without blocking — UI is already correct
+			if (toDisconnect.length) {
+				aggregator.disconnect(toDisconnect).catch((err) => {
+					console.warn("[setConnections] disconnect error:", err);
+				});
+			}
+			if (toConnect.length) {
+				aggregator.connect(toConnect).catch((err) => {
+					console.warn("[setConnections] connect error:", err);
+				});
+			}
 		},
 		[aggregator],
 	);

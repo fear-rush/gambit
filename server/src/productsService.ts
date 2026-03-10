@@ -6,7 +6,7 @@ const productsCache = new Map<string, ProductsStorage>();
 
 export async function fetchAndFormatProducts(
 	exchangeId: string,
-	endpoints: any[],
+	endpoints: (string | { url: string; method: string; data?: string; proxy?: boolean })[],
 	exchange: { formatProducts(data: unknown): ProductsData },
 	forceFetch?: boolean,
 ): Promise<ProductsData | null> {

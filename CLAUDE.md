@@ -77,3 +77,16 @@ Shared types live in `shared/src/types/index.ts` and are re-exported from `share
 1. **Always read documentation** via context7 MCP for libraries/tools before writing code.
 2. **Use web search** to ground your knowledge when uncertain. Reduce hallucination.
 3. **Do not hallucinate or assume** — ask for clarification when unsure.
+
+## React Best Practices
+
+Follow `.claude/skills/vercel-react-best-practices` for all client code. This is a **Vite SPA — not Next.js** — so ignore the following categories that are Next.js/Vercel-specific:
+- **`server-*` rules** (RSC, server actions, React.cache, after()) — we have no server components
+- **`async-suspense-boundaries`** — no streaming SSR
+- **`async-api-routes`** — no Next.js API routes
+- **`rendering-hydration-*`** — no SSR hydration
+- **`rendering-activity`** — experimental React API, not stable
+- **`bundle-dynamic-imports`** using `next/dynamic` — use `React.lazy()` + `Suspense` instead
+- **`client-swr-dedup`** — we use TanStack Query, not SWR
+
+All other rules (re-render optimization, bundle size, JS performance, async patterns, rendering, advanced) apply directly.

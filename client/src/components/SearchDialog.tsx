@@ -9,32 +9,12 @@ import {
 	type MarketType,
 } from "../services/productIndex";
 import { useConnections } from "../hooks/useConnections";
+import { EXCHANGE_SHORT } from "../lib/constants";
 
 interface SearchDialogProps {
 	open: boolean;
 	onClose: () => void;
 }
-
-const EXCHANGE_SHORT: Record<string, string> = {
-	BINANCE: "BIN",
-	BINANCE_FUTURES: "BIN-F",
-	BITFINEX: "BFNX",
-	BITMEX: "BMEX",
-	BITSTAMP: "BSTP",
-	BYBIT: "BYBT",
-	COINBASE: "COIN",
-	DERIBIT: "DRBT",
-	OKEX: "OKEX",
-	KRAKEN: "KRKN",
-	KUCOIN: "KUC",
-	HUOBI: "HUOB",
-	BITGET: "BGET",
-	POLONIEX: "POLO",
-	DYDX: "DYDX",
-	HYPERLIQUID: "HYPL",
-	GATEIO: "GATE",
-	PHEMEX: "PHMX",
-};
 
 const TYPE_LABELS: Record<MarketType, string> = {
 	spot: "Spot",
@@ -93,15 +73,24 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 	const typeFilter = useMemo(() => [...activeTypes].sort(), [activeTypes]);
 
 	// Fetch exchanges list (cached, fetched once)
-	const { data: allExchanges = [] } = useQuery({
+	const {
+		data: allExchanges = [],
+		isLoading: exchangesLoading,
+	} = useQuery({
 		queryKey: ["exchanges"],
 		queryFn: ({ signal }) => fetchExchanges(signal),
 		staleTime: 5 * 60 * 1000,
 		enabled: open,
 	});
 
-	// Search pairs — auto-cancels previous request when key changes
-	const { data: results = [], isLoading } = useQuery({
+	// Search pairs — auto-cancels previous request when query key changes.
+	// `placeholderData` keeps stale results visible during refetch,
+	// so we use `isFetching` (not `isLoading`) to show the spinner overlay.
+	const {
+		data: results = [],
+		isLoading: searchLoading,
+		isFetching: searchFetching,
+	} = useQuery({
 		queryKey: ["products-search", debouncedQuery, exchangeFilter, typeFilter],
 		queryFn: ({ signal }) => {
 			const filters: { exchanges?: string[]; types?: string[] } = {};
@@ -119,6 +108,7 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 	});
 
 	// Pre-populate selected with current connections on open
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only resets on open change, not connection changes
 	useEffect(() => {
 		if (!open) return;
 		setSelected(new Set(connections.keys()));
@@ -176,12 +166,27 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 		setExpandedPair((prev) => (prev === pairLocal ? null : pairLocal));
 	}, []);
 
-	const handleApply = useCallback(async () => {
-		await setConnections([...selected]);
+	const handleApply = useCallback(() => {
+		setConnections([...selected]);
 		onClose();
 	}, [selected, setConnections, onClose]);
 
+	const handleKeyDown = useCallback(
+		(e: React.KeyboardEvent) => {
+			if (e.key === "Escape") onClose();
+		},
+		[onClose],
+	);
+
+	const handleClearFilters = useCallback(() => {
+		setActiveExchanges(new Set());
+		setActiveTypes(new Set());
+	}, []);
+
 	if (!open) return null;
+
+	// True when results exist from placeholderData but a new fetch is in-flight
+	const isRefetching = searchFetching && !searchLoading;
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh]">
@@ -222,38 +227,42 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 							<div className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">
 								Exchanges
 							</div>
-							<div className="space-y-0.5">
-								{allExchanges.map((ex) => {
-									const isActive = activeExchanges.has(ex);
-									return (
-										<button
-											key={ex}
-											type="button"
-											onClick={() => toggleExchange(ex)}
-											className={`flex items-center gap-2 w-full px-2 py-1 text-left text-[11px] rounded ${
-												isActive
-													? "bg-neutral-700/50 text-neutral-200"
-													: "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/30"
-											}`}
-										>
-											<div
-												className={`w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 ${
+							{exchangesLoading ? (
+								<SidebarSkeleton count={6} />
+							) : (
+								<div className="space-y-0.5">
+									{allExchanges.map((ex) => {
+										const isActive = activeExchanges.has(ex);
+										return (
+											<button
+												key={ex}
+												type="button"
+												onClick={() => toggleExchange(ex)}
+												className={`flex items-center gap-2 w-full px-2 py-1 text-left text-[11px] rounded ${
 													isActive
-														? "bg-emerald-600 border-emerald-600"
-														: "border-neutral-700"
+														? "bg-neutral-700/50 text-neutral-200"
+														: "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/30"
 												}`}
 											>
-												{isActive && (
-													<span className="text-white text-[8px]">
-														&#10003;
-													</span>
-												)}
-											</div>
-											{EXCHANGE_SHORT[ex] ?? ex.slice(0, 5)}
-										</button>
-									);
-								})}
-							</div>
+												<div
+													className={`w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 ${
+														isActive
+															? "bg-emerald-600 border-emerald-600"
+															: "border-neutral-700"
+													}`}
+												>
+													{isActive && (
+														<span className="text-white text-[8px]">
+															&#10003;
+														</span>
+													)}
+												</div>
+												{EXCHANGE_SHORT[ex] ?? ex.slice(0, 5)}
+											</button>
+										);
+									})}
+								</div>
+							)}
 						</div>
 
 						<div>
@@ -303,10 +312,7 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 						{(activeExchanges.size > 0 || activeTypes.size > 0) && (
 							<button
 								type="button"
-								onClick={() => {
-									setActiveExchanges(new Set());
-									setActiveTypes(new Set());
-								}}
+								onClick={handleClearFilters}
 								className="text-[10px] text-neutral-500 hover:text-neutral-300 underline"
 							>
 								Clear filters
@@ -317,27 +323,45 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 					{/* Main area */}
 					<div className="flex-1 min-w-0 flex flex-col">
 						<div className="px-4 py-2 border-b border-neutral-800/50">
-							<input
-								ref={inputRef}
-								type="text"
-								value={query}
-								onChange={(e) => setQuery(e.target.value)}
-								placeholder="Search pairs (e.g. BTC, ETH, SOL...)"
-								className="w-full px-3 py-2 text-sm bg-neutral-900/50 border border-neutral-800 rounded text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
-								onKeyDown={(e) => {
-									if (e.key === "Escape") onClose();
-								}}
-							/>
+							<div className="relative">
+								<input
+									ref={inputRef}
+									type="text"
+									value={query}
+									onChange={(e) => setQuery(e.target.value)}
+									placeholder="Search pairs (e.g. BTC, ETH, SOL...)"
+									className="w-full px-3 py-2 text-sm bg-neutral-900/50 border border-neutral-800 rounded text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+									onKeyDown={handleKeyDown}
+								/>
+								{searchFetching && (
+									<div className="absolute right-3 top-1/2 -translate-y-1/2">
+										<Spinner />
+									</div>
+								)}
+							</div>
 						</div>
 
-						<div className="flex-1 overflow-y-auto">
-							{isLoading && results.length === 0 && (
-								<div className="flex items-center justify-center py-12">
-									<div className="text-sm text-neutral-500">Loading...</div>
+						<div className="relative flex-1 overflow-y-auto">
+							{/* Refetch overlay — dims stale results while new data loads */}
+							{isRefetching && (
+								<div className="absolute inset-x-0 top-0 z-10 flex justify-center pt-2 pointer-events-none">
+									<div className="flex items-center gap-2 px-3 py-1 bg-neutral-800/90 rounded-full text-[10px] text-neutral-400">
+										<Spinner />
+										Updating...
+									</div>
 								</div>
 							)}
 
-							{!isLoading && results.length === 0 && (
+							{searchLoading && (
+								<div className="flex items-center justify-center py-12">
+									<div className="flex items-center gap-2 text-sm text-neutral-500">
+										<Spinner />
+										Loading...
+									</div>
+								</div>
+							)}
+
+							{!searchLoading && results.length === 0 && (
 								<div className="flex items-center justify-center py-12">
 									<div className="text-sm text-neutral-600">
 										No pairs found
@@ -345,20 +369,31 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 								</div>
 							)}
 
-							{results.map((pair) => (
-								<PairRow
-									key={pair.local}
-									pair={pair}
-									expanded={expandedPair === pair.local}
-									selected={selected}
-									connectedIds={connectedIds}
-									activeExchanges={activeExchanges}
-									activeTypes={activeTypes}
-									onToggleExpand={handleExpand}
-									onSelectAll={selectAllForPair}
-									onToggleMarket={toggleMarket}
-								/>
-							))}
+							{!searchLoading && (
+								<div className={isRefetching ? "opacity-60 transition-opacity duration-150" : ""}>
+									{results.map((pair) => (
+										<PairRow
+											key={pair.local}
+											pair={pair}
+											expanded={expandedPair === pair.local}
+											selectedCount={
+												pair.markets.filter((m) => selected.has(m)).length
+											}
+											totalMarkets={pair.markets.length}
+											connectedCount={
+												pair.markets.filter((m) => connectedIds.has(m)).length
+											}
+											onToggleExpand={handleExpand}
+											onSelectAll={selectAllForPair}
+											onToggleMarket={toggleMarket}
+											activeExchanges={activeExchanges}
+											activeTypes={activeTypes}
+											selected={selected}
+											connectedIds={connectedIds}
+										/>
+									))}
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
@@ -366,7 +401,9 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 				{/* Footer */}
 				<div className="flex items-center justify-between px-4 py-3 border-t border-neutral-800">
 					<span className="text-xs text-neutral-600">
-						{results.length} pairs
+						{searchFetching && results.length > 0
+							? `${results.length} pairs (updating...)`
+							: `${results.length} pairs`}
 					</span>
 					<div className="flex gap-2">
 						<button
@@ -390,130 +427,197 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
 	);
 }
 
+// --- Spinner: tiny inline loading indicator ---
+
+function Spinner() {
+	return (
+		<div className="animate-spin h-3 w-3">
+		<svg
+			className="h-3 w-3 text-neutral-500"
+			viewBox="0 0 24 24"
+			fill="none"
+			role="img"
+			aria-label="Loading"
+		>
+			<title>Loading</title>
+			<circle
+				className="opacity-25"
+				cx="12"
+				cy="12"
+				r="10"
+				stroke="currentColor"
+				strokeWidth="4"
+			/>
+			<path
+				className="opacity-75"
+				fill="currentColor"
+				d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+			/>
+		</svg>
+		</div>
+	);
+}
+
+// --- SidebarSkeleton: pulse placeholders for exchanges loading ---
+
+const SKELETON_WIDTHS = ["62%", "78%", "55%", "71%", "65%", "80%"];
+
+function SidebarSkeleton({ count }: { count: number }) {
+	return (
+		<div className="space-y-1">
+			{Array.from({ length: count }, (_, i) => (
+				<div
+					key={`skeleton-${SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]}`}
+					className="flex items-center gap-2 px-2 py-1"
+				>
+					<div className="w-3 h-3 rounded-sm bg-neutral-800 animate-pulse" />
+					<div
+						className="h-3 rounded bg-neutral-800 animate-pulse"
+						style={{ width: SKELETON_WIDTHS[i % SKELETON_WIDTHS.length] }}
+					/>
+				</div>
+			))}
+		</div>
+	);
+}
+
 // --- PairRow ---
 
 interface PairRowProps {
 	pair: GroupedPair;
 	expanded: boolean;
-	selected: Set<string>;
-	connectedIds: Set<string>;
-	activeExchanges: Set<string>;
-	activeTypes: Set<MarketType>;
+	selectedCount: number;
+	totalMarkets: number;
+	connectedCount: number;
 	onToggleExpand: (pairLocal: string) => void;
 	onSelectAll: (pairLocal: string, markets: string[]) => void;
 	onToggleMarket: (marketId: string) => void;
+	activeExchanges: Set<string>;
+	activeTypes: Set<MarketType>;
+	selected: Set<string>;
+	connectedIds: Set<string>;
 }
 
-const PairRow = memo(function PairRow({
-	pair,
-	expanded,
-	selected,
-	connectedIds,
-	activeExchanges,
-	activeTypes,
-	onToggleExpand,
-	onSelectAll,
-	onToggleMarket,
-}: PairRowProps) {
-	const selectedCount = pair.markets.filter((m) => selected.has(m)).length;
-	const connectedCount = pair.markets.filter((m) =>
-		connectedIds.has(m),
-	).length;
-	const allSelected =
-		selectedCount === pair.markets.length && pair.markets.length > 0;
+const PairRow = memo(
+	function PairRow({
+		pair,
+		expanded,
+		selectedCount,
+		totalMarkets,
+		connectedCount,
+		onToggleExpand,
+		onSelectAll,
+		onToggleMarket,
+		activeExchanges,
+		activeTypes,
+		selected,
+		connectedIds,
+	}: PairRowProps) {
+		const allSelected = selectedCount === totalMarkets && totalMarkets > 0;
 
-	return (
-		<div className="border-b border-neutral-800/30">
-			<div className="flex items-center w-full text-left px-4 py-2 hover:bg-neutral-800/20">
-				<button
-					type="button"
-					onClick={() => onSelectAll(pair.local, pair.markets)}
-					className="shrink-0 mr-3"
-				>
-					<div
-						className={`w-4 h-4 rounded border flex items-center justify-center ${
-							allSelected
-								? "bg-emerald-600 border-emerald-600"
-								: selectedCount > 0
-									? "bg-emerald-600/40 border-emerald-600"
-									: "border-neutral-700"
-						}`}
+		return (
+			<div className="border-b border-neutral-800/30">
+				<div className="flex items-center w-full text-left px-4 py-2 hover:bg-neutral-800/20">
+					<button
+						type="button"
+						onClick={() => onSelectAll(pair.local, pair.markets)}
+						className="shrink-0 mr-3"
 					>
-						{(allSelected || selectedCount > 0) && (
-							<span className="text-white text-[10px]">
-								{allSelected ? "\u2713" : "\u2014"}
+						<div
+							className={`w-4 h-4 rounded border flex items-center justify-center ${
+								allSelected
+									? "bg-emerald-600 border-emerald-600"
+									: selectedCount > 0
+										? "bg-emerald-600/40 border-emerald-600"
+										: "border-neutral-700"
+							}`}
+						>
+							{(allSelected || selectedCount > 0) && (
+								<span className="text-white text-[10px]">
+									{allSelected ? "\u2713" : "\u2014"}
+								</span>
+							)}
+						</div>
+					</button>
+
+					<button
+						type="button"
+						onClick={() => onToggleExpand(pair.local)}
+						className="flex items-center gap-2 flex-1 min-w-0"
+					>
+						<span className="text-sm font-medium text-neutral-200 w-24 shrink-0">
+							{pair.local}
+						</span>
+
+						<span className="text-[10px] font-semibold text-neutral-400 w-6 shrink-0 text-center">
+							{pair.count}
+						</span>
+
+						<div className="flex gap-1 shrink-0">
+							{pair.types.map((t) => (
+								<span
+									key={t}
+									className={`text-[9px] px-1.5 py-px rounded ${TYPE_BG[t]}`}
+								>
+									{TYPE_LABELS[t]}
+								</span>
+							))}
+						</div>
+
+						<div className="flex-1 min-w-0 flex flex-wrap gap-1 ml-2 overflow-hidden max-h-5">
+							{pair.exchanges.slice(0, 8).map((ex) => (
+								<span
+									key={ex}
+									className="text-[9px] px-1 py-px rounded bg-neutral-800/80 text-neutral-500 whitespace-nowrap"
+								>
+									{EXCHANGE_SHORT[ex] ?? ex.slice(0, 4)}
+								</span>
+							))}
+						</div>
+
+						{connectedCount > 0 && (
+							<span className="flex items-center gap-1 shrink-0 ml-2">
+								<span className="w-2 h-2 rounded-full bg-emerald-500" />
+								<span className="text-[9px] text-emerald-500">
+									{connectedCount}
+								</span>
 							</span>
 						)}
-					</div>
-				</button>
 
-				<button
-					type="button"
-					onClick={() => onToggleExpand(pair.local)}
-					className="flex items-center gap-2 flex-1 min-w-0"
-				>
-					<span className="text-sm font-medium text-neutral-200 w-24 shrink-0">
-						{pair.local}
-					</span>
-
-					<span className="text-[10px] font-semibold text-neutral-400 w-6 shrink-0 text-center">
-						{pair.count}
-					</span>
-
-					<div className="flex gap-1 shrink-0">
-						{pair.types.map((t) => (
-							<span
-								key={t}
-								className={`text-[9px] px-1.5 py-px rounded ${TYPE_BG[t]}`}
-							>
-								{TYPE_LABELS[t]}
-							</span>
-						))}
-					</div>
-
-					<div className="flex-1 min-w-0 flex flex-wrap gap-1 ml-2 overflow-hidden max-h-5">
-						{pair.exchanges.slice(0, 8).map((ex) => (
-							<span
-								key={ex}
-								className="text-[9px] px-1 py-px rounded bg-neutral-800/80 text-neutral-500 whitespace-nowrap"
-							>
-								{EXCHANGE_SHORT[ex] ?? ex.slice(0, 4)}
-							</span>
-						))}
-					</div>
-
-					{connectedCount > 0 && (
-						<span className="flex items-center gap-1 shrink-0 ml-2">
-							<span className="w-2 h-2 rounded-full bg-emerald-500" />
-							<span className="text-[9px] text-emerald-500">
-								{connectedCount}
-							</span>
+						<span
+							className={`text-neutral-600 text-[10px] ml-2 shrink-0 ${
+								expanded ? "rotate-180" : ""
+							}`}
+						>
+							&#9660;
 						</span>
-					)}
+					</button>
+				</div>
 
-					<span
-						className={`text-neutral-600 text-[10px] ml-2 shrink-0 ${
-							expanded ? "rotate-180" : ""
-						}`}
-					>
-						&#9660;
-					</span>
-				</button>
+				{expanded && (
+					<ExpandedMarkets
+						pairLocal={pair.local}
+						selected={selected}
+						connectedIds={connectedIds}
+						activeExchanges={activeExchanges}
+						activeTypes={activeTypes}
+						onToggleMarket={onToggleMarket}
+					/>
+				)}
 			</div>
-
-			{expanded && (
-				<ExpandedMarkets
-					pairLocal={pair.local}
-					selected={selected}
-					connectedIds={connectedIds}
-					activeExchanges={activeExchanges}
-					activeTypes={activeTypes}
-					onToggleMarket={onToggleMarket}
-				/>
-			)}
-		</div>
-	);
-});
+		);
+	},
+	(prev, next) =>
+		prev.pair === next.pair &&
+		prev.expanded === next.expanded &&
+		prev.selectedCount === next.selectedCount &&
+		prev.totalMarkets === next.totalMarkets &&
+		prev.connectedCount === next.connectedCount &&
+		prev.activeExchanges === next.activeExchanges &&
+		prev.activeTypes === next.activeTypes &&
+		prev.selected === next.selected &&
+		prev.connectedIds === next.connectedIds,
+);
 
 // --- ExpandedMarkets: fetches products on demand with TanStack Query ---
 
@@ -540,7 +644,11 @@ function ExpandedMarkets({
 	);
 	const typeFilter = useMemo(() => [...activeTypes].sort(), [activeTypes]);
 
-	const { data: products = [], isLoading } = useQuery({
+	const {
+		data: products = [],
+		isLoading,
+		isFetching,
+	} = useQuery({
 		queryKey: ["products-pair", pairLocal, exchangeFilter, typeFilter],
 		queryFn: ({ signal }) => {
 			const filters: { exchanges?: string[]; types?: string[] } = {};
@@ -553,28 +661,40 @@ function ExpandedMarkets({
 			);
 		},
 		staleTime: 30 * 1000,
+		placeholderData: (prev) => prev,
 	});
 
+	const isRefetching = isFetching && !isLoading;
+
 	return (
-		<div className="bg-neutral-900/30 border-t border-neutral-800/20">
+		<div className="relative bg-neutral-900/30 border-t border-neutral-800/20">
 			{isLoading && (
-				<div className="px-8 py-3 text-[11px] text-neutral-500">
+				<div className="flex items-center gap-2 px-8 py-3 text-[11px] text-neutral-500">
+					<Spinner />
 					Loading markets...
 				</div>
 			)}
-			{!isLoading &&
-				products.map((product) => (
-					<MarketRow
-						key={product.id}
-						product={product}
-						isSelected={selected.has(product.id)}
-						isConnected={connectedIds.has(product.id)}
-						onToggle={onToggleMarket}
-					/>
-				))}
+			{!isLoading && (
+				<div className={isRefetching ? "opacity-60 transition-opacity duration-150" : ""}>
+					{products.map((product) => (
+						<MarketRow
+							key={product.id}
+							product={product}
+							isSelected={selected.has(product.id)}
+							isConnected={connectedIds.has(product.id)}
+							onToggle={onToggleMarket}
+						/>
+					))}
+				</div>
+			)}
 			{!isLoading && products.length === 0 && (
 				<div className="px-8 py-3 text-[11px] text-neutral-600">
 					No markets match current filters
+				</div>
+			)}
+			{isRefetching && (
+				<div className="absolute top-2 right-3">
+					<Spinner />
 				</div>
 			)}
 		</div>

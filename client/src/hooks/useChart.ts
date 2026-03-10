@@ -122,8 +122,11 @@ export function useChart(
 
 		const SUB_PANE_SIZE = 0.12;
 
-		function findPaneIndex(pane: IPaneApi<Time>): number {
-			return chart!.panes().indexOf(pane);
+		function findPaneIndex(
+			c: IChartApi,
+			pane: IPaneApi<Time>,
+		): number {
+			return c.panes().indexOf(pane);
 		}
 
 		// Volume pane
@@ -135,7 +138,7 @@ export function useChart(
 			cvdSeriesRef.current.priceScale().applyOptions(cvdPriceScale);
 			volumePaneRef.current = pane;
 		} else if (!panels.volume && volumePaneRef.current) {
-			const idx = findPaneIndex(volumePaneRef.current);
+			const idx = findPaneIndex(chart, volumePaneRef.current);
 			if (idx > 0) chart.removePane(idx);
 			volumePaneRef.current = null;
 			volumeSeriesRef.current = null;
@@ -152,7 +155,7 @@ export function useChart(
 			);
 			deltaPaneRef.current = pane;
 		} else if (!panels.delta && deltaPaneRef.current) {
-			const idx = findPaneIndex(deltaPaneRef.current);
+			const idx = findPaneIndex(chart, deltaPaneRef.current);
 			if (idx > 0) chart.removePane(idx);
 			deltaPaneRef.current = null;
 			deltaSeriesRef.current = null;
@@ -170,7 +173,7 @@ export function useChart(
 			rsiOSSeriesRef.current = pane.addSeries(LineSeries, rsiOversoldOptions);
 			rsiPaneRef.current = pane;
 		} else if (!panels.rsi && rsiPaneRef.current) {
-			const idx = findPaneIndex(rsiPaneRef.current);
+			const idx = findPaneIndex(chart, rsiPaneRef.current);
 			if (idx > 0) chart.removePane(idx);
 			rsiPaneRef.current = null;
 			rsiSeriesRef.current = null;
@@ -211,7 +214,8 @@ export function useChart(
 		const rsiState: RSIState = initRSI(14);
 		let lastCompletedBarTime: UTCTimestamp | null = null;
 
-		// Per-bar indicator values for crosshair lookup
+		// Per-bar indicator values for crosshair lookup (capped to prevent memory leak)
+		const MAX_BAR_INDICATORS = 500;
 		const barIndicators = new Map<
 			UTCTimestamp,
 			{
@@ -519,7 +523,7 @@ export function useChart(
 					} as LineData<UTCTimestamp>);
 				}
 
-				// Store indicator values for crosshair lookup
+				// Store indicator values for crosshair lookup, evict oldest if over limit
 				barIndicators.set(bar.time, {
 					ema9: liveEma9,
 					ema21: liveEma21,
@@ -529,6 +533,10 @@ export function useChart(
 					sellVol: bar.sellVolume,
 					delta,
 				});
+				if (barIndicators.size > MAX_BAR_INDICATORS) {
+					const oldest = barIndicators.keys().next().value;
+					if (oldest !== undefined) barIndicators.delete(oldest);
+				}
 
 				// Update legend (only if not hovering)
 				if (!isHoveringRef.current && legendCbRef.current) {
@@ -554,8 +562,14 @@ export function useChart(
 
 		scheduleNext();
 
+		const MAX_QUEUE = 5000;
 		const handleTrades = (trades: Trade[]) => {
-			Array.prototype.push.apply(queueRef.current, trades);
+			const queue = queueRef.current;
+			Array.prototype.push.apply(queue, trades);
+			// Drop oldest trades if queue grows too large (e.g. hidden tab)
+			if (queue.length > MAX_QUEUE) {
+				queueRef.current = queue.slice(-MAX_QUEUE);
+			}
 		};
 		aggregatorService.on("trades", handleTrades);
 
